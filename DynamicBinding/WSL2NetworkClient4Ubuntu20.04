@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Used in WSL2 Ubuntu-20.04
+
+if [ $# -ne 3 ]; then
+    echo 'invalid parameters'
+    exit
+fi
+
+IP=$1
+GATEWAY=$2
+BROADCAST=$3
+
+CURRENT_IP=$(ip addr show eth0 | grep 'inet\b' | awk '{print $2}' | head -n 1)
+CURRENT_IP=${CURRENT_IP%/*}
+
+if [ $CURRENT_IP != $IP ]; then
+    # Check if network need to upgrade
+    ip addr del $(ip addr show eth0 | grep 'inet\b' | awk '{print $2}' | head -n 1) dev eth0
+    ip addr add $IP/24 broadcast $BROADCAST dev eth0
+    ip route add 0.0.0.0/0 via $GATEWAY dev eth0
+
+    # WSL always regenerates resolv.conf at ubuntu session restarted
+    # So, injected .bashrc was used to modify resolv.conf every time
+    CMD="sudo sed -i -r \"s/nameserver .*?/nameserver $GATEWAY/g\" /etc/resolv.conf"
+    USERS_HOME=$(ls /home/)
+    USERS_HOME=(${USERS_HOME// / })
+    BASHRCS=('/root/.bashrc')
+    BASHRCS_IDX=1
+    for USR in ${USERS_HOME[@]}
+    do
+        BASHRC_PATH="/home/$USR/.bashrc"
+        if [ -e $BASHRC_PATH ]; then
+            BASHRCS[$BASHRCS_IDX]=$BASHRC_PATH
+            BASHRCS_IDX=`expr $BASHRCS_IDX + 1`
+        fi
+    done
+
+    for BASHRC in ${BASHRCS[@]}
+    do
+        if grep -q WSL2Network $BASHRC; then 
+            sed -i -r "s/\?\/nameserver .*\/g/\?\/nameserver $GATEWAY\/g/g" $BASHRC
+        else
+            echo "" >> $BASHRC
+            echo "# WSL2Network" >> $BASHRC
+            echo $CMD >> $BASHRC
+        fi
+    done
+    echo "Client upgraded."
+else
+    echo "Client needn't upgrading."
+fi
+
+# Do something incidentally
+/etc/init.d/ssh start

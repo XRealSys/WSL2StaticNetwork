@@ -1,0 +1,8 @@
+#!/bin/sh
+sudo /etc/init.d/ssh start
+
+#WSL2 DDNS
+IPADDR=$(ip addr show eth0 | grep 'inet\b' | awk '{print $2}')
+IPADDR=${IPADDR%/*}
+SERV=$(ip route | head -n 1 | awk '{print $3}')
+curl -s http://$SERV:8448/wsl2ddns?ip=$IPADDR\&domain=ubuntu.wsl2.local >> wsl2ddns.log
